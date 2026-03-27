@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Aula de Phaser: Movimento e Animação de Personagem</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #0a1f2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .game-container {
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 3px solid #ffcc66;
+        }
+        .info-panel {
+            background: #1e2a3a;
+            color: #eee;
+            padding: 8px 15px;
+            text-align: center;
+            font-size: 14px;
+            border-top: 1px solid #ffcc66;
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .info-panel p {
+            margin: 5px 0;
+        }
+        .controls {
+            display: flex;
+            gap: 20px;
+        }
+        kbd {
+            background: #2c3e44;
+            border-radius: 5px;
+            padding: 2px 8px;
+            font-weight: bold;
+            color: #ffcc66;
+            margin: 0 3px;
+            font-family: monospace;
+        }
+        a {
+            color: #ffaa44;
+            text-decoration: none;
+        }
+        @media (max-width: 700px) {
+            .info-panel { flex-direction: column; align-items: center; gap: 5px; }
+        }
+    </style>
+    <!-- Importando Phaser 3 (CDN oficial) -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+</head>
+<body>
+<div>
+    <div class="game-container">
+        <div id="game"></div>
+        
+    </div>
+    
+</div>
+
+<script>
+    // ============================================================
+    // CLASSE PRINCIPAL (CENA) - Toda a lógica do jogo
+    // ============================================================
+    class JogoPrincipal extends Phaser.Scene {
+        constructor() {
+            super({ key: 'JogoPrincipal' });
+        }
+
+        // --------------------------------------------------------
+        // 1. PRELOAD: Carregar os assets (imagens, spritesheets, etc)
+        // --------------------------------------------------------
+        preload() {
+            // Carregando o spritesheet do personagem "Dude" (imagem clássica dos exemplos Phaser)
+            // Frame width = 32px, Frame height = 48px (tamanho de cada célula do sprite)
+            // URL confiável: repositório oficial de exemplos do Phaser (labs.phaser.io)
+            this.load.spritesheet('dude', 'https://labs.phaser.io/assets/sprites/dude.png', {
+                frameWidth: 32,
+                frameHeight: 48
+            });
+
+            // Opcional: carregar uma imagem de fundo simples (apenas para estética)
+            // Vamos criar um fundo gradiente via código, então não é necessário asset extra.
+        }
+
+        // --------------------------------------------------------
+        // 2. CREATE: Configurar objetos do jogo, animações, teclado, física
+        // --------------------------------------------------------
+        create() {
+            // ---- 2.1 Configuração do fundo (estético) ----
+            // Adiciona um gradiente suave no fundo da cena (efeito visual)
+            this.cameras.main.setBackgroundColor('#2c3e66');
+            // Cria um efeito de "chão" simples com retângulos semicolheitos (apenas visual)
+            this.add.rectangle(400, 300, 800, 600, 0x1a2f4a).setAlpha(0.4);
+            this.add.grid(400, 300, 800, 600, 32, 32, 0x88aaff, 0x335588).setAlpha(0.2);
+
+            // ---- 2.2 Adicionar o personagem com Física ----
+            // Posição inicial: centro da tela (400, 300)
+            this.player = this.physics.add.sprite(400, 300, 'dude');
+            
+            // Ajustes de colisão e limites:
+            // - setCollideWorldBounds(true): impede que o personagem saia das bordas do mundo.
+            // - setBounce(0): sem quique ao colidir com as bordas.
+            // - setDrag: um pequeno arrasto para suavizar a parada (opcional)
+            this.player.setCollideWorldBounds(true);
+            this.player.setBounce(0);
+            this.player.setDrag(0.95, 0.95); // reduz a velocidade gradualmente (ajuda na fluidez)
+
+            // ---- 2.3 Definir as ANIMAÇÕES do personagem (baseadas no spritesheet) ----
+            // O spritesheet "dude" possui 9 frames organizados assim:
+            // Frames 0-3: andando para a esquerda
+            // Frame 4: parado (idle)
+            // Frames 5-8: andando para a direita
+            
+            // Animação de movimento para a ESQUERDA (reproduz frames 0,1,2,3 em loop)
+            this.anims.create({
+                key: 'left',                // Nome único da animação
+                frames: this.anims.generateFrameNumbers('dude', { start: 0, end: 3 }),
+                frameRate: 10,              // Velocidade da animação (quadros por segundo)
+                repeat: -1                  // -1 = loop infinito
+            });
+            
+            // Animação de movimento para a DIREITA (frames 5 a 8)
+            this.anims.create({
+                key: 'right',
+                frames: this.anims.generateFrameNumbers('dude', { start: 5, end: 8 }),
+                frameRate: 10,
+                repeat: -1
+            });
+            
+            // Animação "parado" (frame 4, sem loop, apenas um quadro estático)
+            // Não precisamos criar uma animação de idle, apenas usaremos setFrame(4)
+            
+            // ---- 2.4 Configurar entrada do TECLADO (Setas + WASD) ----
+            // Phaser fornece um objeto cursor com as setas (up, down, left, right)
+            this.cursors = this.input.keyboard.createCursorKeys();
+            
+            // Para suporte a WASD, criamos um objeto com as teclas individuais
+            // Método: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W) etc.
+            this.wasd = {
+                up: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
+                down: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
+                left: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
+                right: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D)
+            };
+            
+            // ---- 2.5 Ajustes adicionais ----
+            // Para deixar a câmera seguindo o personagem? Não necessário, mas podemos definir mundo
+            // Os limites da tela já são automaticamente configurados pelo mundo físico.
+            // Por padrão, o mundo tem o tamanho do canvas (800x600) e o player não sai.
+            
+            // Texto instrutivo dentro do jogo (para reforçar o aprendizado)
+            this.add.text(20, 20, 'Use SETAS ou WASD para mover\nAnimações: esquerda/direita', {
+                fontFamily: 'monospace',
+                fontSize: '14px',
+                color: '#ffffff',
+                backgroundColor: '#000000aa',
+                padding: { x: 8, y: 4 },
+                borderRadius: 6
+            }).setScrollFactor(0); // fixo na tela
+            
+            // Pequeno indicador de posição (didático)
+            this.posText = this.add.text(20, 85, 'Posição: (400, 300)', {
+                fontFamily: 'monospace',
+                fontSize: '12px',
+                color: '#ccffcc',
+                backgroundColor: '#000000aa',
+                padding: { x: 6, y: 3 },
+                borderRadius: 6
+            }).setScrollFactor(0);
+        }
+        
+        // --------------------------------------------------------
+        // 3. UPDATE: Função chamada a cada quadro (60x por segundo)
+        //    Responsável por: ler entrada, mover personagem, animações
+        // --------------------------------------------------------
+        update() {
+            // ---- 3.1 LER ENTRADA DO TECLADO (vetor de movimento) ----
+            let moveX = 0;
+            let moveY = 0;
+            
+            // Verifica setas do teclado
+            if (this.cursors.left.isDown)  moveX = -1;
+            if (this.cursors.right.isDown) moveX = 1;
+            if (this.cursors.up.isDown)    moveY = -1;
+            if (this.cursors.down.isDown)  moveY = 1;
+            
+            // Verifica teclas WASD (se não estiver usando setas, complementa)
+            if (this.wasd.left.isDown)  moveX = -1;
+            if (this.wasd.right.isDown) moveX = 1;
+            if (this.wasd.up.isDown)    moveY = -1;
+            if (this.wasd.down.isDown)  moveY = 1;
+            
+            // ---- 3.2 NORMALIZAÇÃO para movimento diagonal uniforme ----
+            // Se moveX e moveY são ambos diferentes de zero, ajustamos para manter velocidade constante.
+            // Vamos definir velocidade base = 200 pixels por segundo.
+            const velocidadeBase = 200;
+            let velX = moveX * velocidadeBase;
+            let velY = moveY * velocidadeBase;
+            
+            // Se estiver movendo na diagonal (ex: esquerda + cima), normalizar para não andar mais rápido
+            if (moveX !== 0 && moveY !== 0) {
+                // Fator de correção: 1 / √2 ≈ 0.7071
+                const fator = 0.7071;
+                velX *= fator;
+                velY *= fator;
+            }
+            
+            // Aplica a velocidade ao corpo físico do personagem
+            this.player.setVelocity(velX, velY);
+            
+            // ---- 3.3 GERENCIAR ANIMAÇÃO baseada no movimento ----
+            // Lógica:
+            // - Se está se movendo para a esquerda (velX < 0) → animação 'left'
+            // - Se está se movendo para a direita (velX > 0) → animação 'right'
+            // - Se não há movimento horizontal (velX == 0) mas há movimento vertical, mantém a última animação
+            //   (para não ficar mudando abruptamente, mantemos o estado atual, mas se quiser pode parar).
+            // - Se parado completamente (velX == 0 e velY == 0), para animação e mostra frame parado (4)
+            
+            const isMovingHorizontally = (velX !== 0);
+            const isMoving = (velX !== 0 || velY !== 0);
+            
+            if (isMoving) {
+                if (velX < 0) {
+                    // Movendo para esquerda
+                    this.player.anims.play('left', true);
+                } 
+                else if (velX > 0) {
+                    // Movendo para direita
+                    this.player.anims.play('right', true);
+                }
+                // Se move apenas na vertical (cima/baixo) mantém a animação atual sem alterar.
+                // Isso evita que a animação seja interrompida quando apenas sobe/desce.
+                // Se quiséssemos animação para cima/baixo, precisaríamos de um spritesheet com esses frames.
+                // Para fins didáticos, preservamos a última animação horizontal (left ou right).
+                // Caso queira parar a animação ao mover só vertical, descomente o bloco abaixo:
+                // else {
+                //     // Se não há movimento horizontal mas há vertical, paramos a animação e exibimos frame parado
+                //     if (this.player.anims.isPlaying) this.player.anims.stop();
+                //     this.player.setFrame(4);
+                // }
+            } 
+            else {
+                // Personagem parado: interrompe qualquer animação e exibe o frame parado (idle = frame 4)
+                if (this.player.anims.isPlaying) {
+                    this.player.anims.stop();
+                }
+                this.player.setFrame(4);   // Frame estático
+            }
+            
+            // ---- 3.4 (Opcional) Atualizar texto com posição para aprendizado ----
+            const posX = Math.floor(this.player.x);
+            const posY = Math.floor(this.player.y);
+            this.posText.setText(`Posição: (${posX}, ${posY}) | Vel: (${velX.toFixed(0)}, ${velY.toFixed(0)})`);
+            
+            if (posX < 10 || posX > 700 || posY < 10 || posY > 550) {
+                this.posText.setColor('#ff4444'); // vermelho: perto da borda
+            } else {
+                this.posText.setColor('#ccffcc'); // verde: zona segura
+            }
+            
+            // Nota extra: os limites da tela já estão sendo aplicados automaticamente pelo método 
+            // 'setCollideWorldBounds(true)' configurado no create(). O personagem nunca ultrapassa as bordas.
+        }
+    }
+    
+    // ============================================================
+    // CONFIGURAÇÃO DO JOGO (GAME CONFIG)
+    // ============================================================
+    const config = {
+        type: Phaser.AUTO,          // Escolhe automaticamente WebGL ou Canvas
+        width: 800,                 // Largura do canvas
+        height: 600,                // Altura do canvas
+        parent: 'game',             // ID do elemento HTML que vai conter o jogo
+        physics: {
+            default: 'arcade',      // Usa física Arcade (simples, ideal para jogos 2D)
+            arcade: {
+                gravity: { y: 0 },  // Sem gravidade (movimento livre)
+                debug: false        // Desligar modo debug (true mostraria hitboxes)
+            }
+        },
+        scene: JogoPrincipal,       // Define a cena principal criada acima
+        backgroundColor: '#0a2a3a', // Cor de fundo de segurança (caso falhe o gradiente)
+        pixelArt: false,            // Para sprites suaves
+        scale: {
+            mode: Phaser.Scale.FIT, // Ajusta o canvas para caber na div, mantendo proporção
+            autoCenter: Phaser.Scale.CENTER_BOTH
+        }
+    };
+    
+    // Inicializa o jogo Phaser com a configuração definida
+    const game = new Phaser.Game(config);
+    
+    // ============================================================
+    // NOTAS DIDÁTICAS (Explicação em comentários e console)
+    // ============================================================
+    console.log("%c🎮 Jogo Phaser carregado! | Movimento com setas/WASD | Limites ativos | Animações de movimento (esquerda/direita)", "color: #ffaa44; font-size: 14px");
+    console.log("📘 Explicação rápida: O personagem 'Dude' possui spritesheet com 9 frames. Criamos animações 'left' (frames 0-3) e 'right' (frames 5-8). No update(), lemos teclado, aplicamos velocidade, e reproduzimos a animação adequada. O método setCollideWorldBounds() garante que o personagem não saia da tela.");
+</script>
+</body>
+</html>
+```
